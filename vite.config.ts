@@ -20,9 +20,7 @@ export default defineConfig({
       },
     },
     allowedHosts: ['booking.holytravelsandtour.com', 'www.booking.holytravelsandtour.com', 'localhost', '0.0.0.0'],
-    hmr: {
-      overlay: false, // Disable error overlay to prevent blocking
-    },
+    hmr: false, // Disable HMR completely in production to avoid WebSocket errors
     // Handle malformed URIs gracefully
     middlewareMode: false,
   },
