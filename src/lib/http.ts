@@ -2,44 +2,66 @@
 import axios, { InternalAxiosRequestConfig } from "axios";
 
 /** ---------- Config ---------- **/
-// Helper to normalize hostname or full URL to always use www.mtumrah.com
+// Helper to normalize hostname or full URL to always use www.holytravel.com
 const normalizeHostname = (hostname: string): string => {
-  // If hostname is mtumrah.com, return www.mtumrah.com
-  if (hostname === 'mtumrah.com') {
-    return 'www.mtumrah.com';
+  // If hostname is holytravel.com, return www.holytravel.com
+  if (hostname === 'holytravel.com') {
+    return 'www.holytravel.com';
   }
   // If hostname already has www or is localhost, return as is
   if (hostname.includes('www.') || hostname === 'localhost' || hostname.includes('localhost:')) {
     return hostname;
   }
   // For other domains without www, add www (optional - can be removed if not needed)
-  // For now, only handle mtumrah.com specifically
+  // For now, only handle holytravel.com specifically
   return hostname;
 };
 
 // Helper to normalize API base URL (handles both hostname and full URLs)
 const normalizeApiBase = (baseUrl: string | undefined): string => {
-  if (!baseUrl) {
-    return typeof window !== "undefined" 
-      ? `${window.location.protocol}//${normalizeHostname(window.location.hostname)}`
-      : "https://localhost:7000";
+  // If VITE_API_BASE is explicitly set, use it
+  if (baseUrl) {
+    try {
+      const url = new URL(baseUrl);
+      if (url.hostname === 'holytravel.com') {
+        url.hostname = 'www.holytravel.com';
+        return url.toString().replace(/\/$/, ''); // Remove trailing slash
+      }
+      return baseUrl.replace(/\/$/, ''); // Remove trailing slash
+    } catch {
+      // If it's not a valid URL, treat it as hostname
+      const normalized = normalizeHostname(baseUrl);
+      return typeof window !== "undefined"
+        ? `${window.location.protocol}//${normalized}`
+        : `https://${normalized}`;
+    }
   }
   
-  // If it's a full URL, normalize the hostname part
-  try {
-    const url = new URL(baseUrl);
-    if (url.hostname === 'mtumrah.com') {
-      url.hostname = 'www.mtumrah.com';
-      return url.toString().replace(/\/$/, ''); // Remove trailing slash
+  // In development on localhost, connect directly to backend on port 7000
+  // Vite proxy should handle this, but explicit connection is more reliable
+  if (typeof window !== "undefined") {
+    const hostname = window.location.hostname;
+    const protocol = window.location.protocol;
+    
+    // If running on localhost, use explicit port 7000
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return 'http://localhost:7000';
     }
-    return baseUrl.replace(/\/$/, ''); // Remove trailing slash
-  } catch {
-    // If it's not a valid URL, treat it as hostname
-    const normalized = normalizeHostname(baseUrl);
-    return typeof window !== "undefined"
-      ? `${window.location.protocol}//${normalized}`
-      : `https://${normalized}`;
+    
+    // For production (booking.holytravelsandtour.com), use same origin
+    // Nginx will proxy /api/* to backend
+    if (hostname === 'booking.holytravelsandtour.com' || hostname.includes('holytravel')) {
+      // Use relative URLs so nginx can proxy /api/* requests
+      return '';
+    }
+    
+    // For other hosts, construct URL normally
+    const normalized = normalizeHostname(hostname);
+    return `${protocol}//${normalized}`;
   }
+  
+  // Server-side or fallback
+  return "http://localhost:7000";
 };
 
 const API_BASE = normalizeApiBase(import.meta.env.VITE_API_BASE);

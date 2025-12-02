@@ -19,7 +19,7 @@ export default defineConfig({
         changeOrigin: true,
       },
     },
-    allowedHosts: ['miqattravels.com', 'www.miqattravels.com'],
+    allowedHosts: ['booking.holytravelsandtour.com', 'www.booking.holytravelsandtour.com', 'localhost', '0.0.0.0'],
     hmr: {
       overlay: false, // Disable error overlay to prevent blocking
     },

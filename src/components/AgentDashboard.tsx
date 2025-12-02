@@ -4,10 +4,6 @@ import { useData } from '../context/DataContext';
 import StatCard from './StatCard';
 import { Calendar, MessageSquare, TrendingUp, Clock } from 'lucide-react';
 
-/** safely get an id from string | {_id} | undefined */
-const toId = (v: any): string | undefined =>
-  (v && typeof v === 'object' && v._id) || (typeof v === 'string' ? v : undefined);
-
 /** Normalize agent ID - handles various formats */
 const normalizeId = (id: any): string | null => {
   if (!id) return null;
@@ -85,7 +81,7 @@ const AgentDashboard: React.FC = () => {
     fetchInquiries();
   }, [fetchBookings, fetchInquiries]);
 
-  const agentId = normalizeId(user?._id) || normalizeId((user as any)?.id) || normalizeId((user as any)?.agentId);
+  const agentId = normalizeId(user?.id) || normalizeId((user as any)?._id) || normalizeId((user as any)?.agentId);
 
   const bookings = Array.isArray(rawBookings) ? rawBookings : [];
   const inquiries = Array.isArray(rawInquiries) ? rawInquiries : [];

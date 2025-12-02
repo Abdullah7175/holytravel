@@ -68,11 +68,11 @@ const AppContent: React.FC = () => {
       {/* Mobile Header */}
       <div className="lg:hidden bg-white shadow-sm border-b px-4 py-3 flex items-center justify-between sticky top-0 z-30">
         <div className="flex items-center space-x-3">
-          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-            <span className="text-white font-bold text-sm">M</span>
+          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center overflow-hidden">
+            <img src="/holytravel.png" alt="Holy Travel" className="w-full h-full object-contain" />
           </div>
           <h1 className="font-semibold text-gray-900 text-sm sm:text-base">
-            MARWAH TRAVELS
+            HOLY TRAVEL
           </h1>
         </div>
         <button
