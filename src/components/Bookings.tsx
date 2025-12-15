@@ -587,12 +587,12 @@ const Bookings: React.FC = () => {
         doc.setTextColor(255, 255, 255);
         doc.setFontSize(22);
         doc.setFont('helvetica', 'bold');
-        doc.text('HOLY TRAVEL', margin, 50);
+        doc.text('Holy Travels and Tour', margin, 50);
         
         // Tagline
         doc.setFontSize(10);
         doc.setFont('helvetica', 'normal');
-        doc.text('Your Journey, Our Commitment', margin, 68);
+        doc.text('Your Personalized Luxury Umrah Partner 🕋', margin, 68);
         
         // Document title on right
         doc.setFontSize(10);
@@ -625,11 +625,11 @@ const Bookings: React.FC = () => {
         
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(8);
-        doc.text('info@holytravel.com', margin, footerY + 28);
-        doc.text('+92 (316) 503-2128', margin, footerY + 40);
+        doc.text('info@holytravelsandtour.com', margin, footerY + 28);
+        doc.text('+1 415-791-5351', margin, footerY + 40);
         
         // Website and support
-        doc.text('www.holytravel.com', pageWidth / 2, footerY + 28, { align: 'center' });
+        doc.text('www.holytravelsandtour.com', pageWidth / 2, footerY + 28, { align: 'center' });
         doc.text('24/7 Customer Support', pageWidth / 2, footerY + 40, { align: 'center' });
         
         // License info
@@ -1264,19 +1264,18 @@ const Bookings: React.FC = () => {
       doc.setTextColor(0, 0, 0);
       doc.setFontSize(14);
       doc.setFont('helvetica', 'bold');
-      doc.text('HOLY TRAVEL', margin, y + 20);
+      doc.text('Holy Travels and Tour', margin, y + 20);
       
-      // Company Address
+      // Tagline
       doc.setFontSize(10);
       doc.setFont('helvetica', 'normal');
-      doc.text('15636 71st Ave', margin, y + 35);
-      doc.text('Flushing, NY 11367', margin, y + 50);
+      doc.text('Your Personalized Luxury Umrah Partner 🕋', margin, y + 35);
 
       // Contact Information (to the right of address)
       const contactX = 250;
-      doc.text('info@holytravel.com', contactX, y + 35);
-      doc.text('+1 (646) 699-9732', contactX, y + 50);
-      doc.text('www.holytravel.com', contactX, y + 65);
+      doc.text('info@holytravelsandtour.com', contactX, y + 35);
+      doc.text('+1 415-791-5351', contactX, y + 50);
+      doc.text('www.holytravelsandtour.com', contactX, y + 65);
 
       // Logo (Top Right) - Add logo2.png
       try {
@@ -1303,7 +1302,7 @@ const Bookings: React.FC = () => {
       
       y += 80;
 
-      // ============= BILL TO / SHIP TO SECTION =============
+      // ============= BILL TO SECTION =============
       
       // Light blue background
       doc.setFillColor(173, 216, 230); // Light blue
@@ -1316,12 +1315,6 @@ const Bookings: React.FC = () => {
       doc.text('Bill to', margin + 10, y + 15);
       doc.setFont('helvetica', 'normal');
       doc.text(data.customerName || '—', margin + 10, y + 30);
-      
-      // Ship To (to the right)
-      doc.setFont('helvetica', 'bold');
-      doc.text('Ship to', margin + 250, y + 15);
-      doc.setFont('helvetica', 'normal');
-      doc.text(data.customerName || '—', margin + 250, y + 30);
       
       y += 60;
 
@@ -1951,37 +1944,46 @@ const Bookings: React.FC = () => {
                         <div className="bg-orange-50 rounded-lg p-3">
                           <h4 className="text-xs font-semibold text-orange-900 mb-2">Transport Details</h4>
                           <div className="text-xs text-orange-800 space-y-1">
-                            {(booking as any).transport?.transportType && (
-                              <p>
-                                <span className="font-medium">Type:</span>{' '}
-                                {(booking as any).transport.transportType
-                                  ?.charAt(0)
-                                  .toUpperCase() + (booking as any).transport.transportType?.slice(1)}
-                              </p>
-                            )}
+                            {(() => {
+                              const legs = (booking as any).transportation?.legs || (booking as any).transport?.legs || [];
+                              if (legs.length > 0) {
+                                return (
+                                  <div className="mt-2">
+                                    <p className="font-medium">Transport Legs:</p>
+                                    <div className="mt-1 space-y-1">
+                                      {legs.map((l: any, i: number) => (
+                                        <div key={i} className="border-b border-orange-100 pb-1">
+                                          <p>
+                                            <span className="font-medium">Leg {i + 1}:</span> {l.from || '—'} → {l.to || '—'} 
+                                            {l.vehicleType && <span className="ml-1">({l.vehicleType})</span>}
+                                          </p>
+                                          {(l.date || l.time) && (
+                                            <p className="text-orange-700">
+                                              {formatDate(l.date) || '—'} {l.time || ''}
+                                            </p>
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                );
+                              } else if ((booking as any).transport?.transportType) {
+                                return (
+                                  <p>
+                                    <span className="font-medium">Type:</span>{' '}
+                                    {(booking as any).transport.transportType
+                                      ?.charAt(0)
+                                      .toUpperCase() + (booking as any).transport.transportType?.slice(1)}
+                                  </p>
+                                );
+                              }
+                              return null;
+                            })()}
                             {(booking as any).transport?.pickupLocation && (
                               <p>
                                 <span className="font-medium">Pickup:</span> {(booking as any).transport.pickupLocation}
                               </p>
                             )}
-                            {Array.isArray((booking as any).transport?.legs) &&
-                              (booking as any).transport.legs.length > 0 && (
-                                <div className="mt-2">
-                                  <p className="font-medium">Legs:</p>
-                                  <div className="mt-1 space-y-1">
-                                    {(booking as any).transport.legs.map((l: any, i: number) => (
-                                      <div key={i} className="border-b border-orange-100 pb-1">
-                                        <p>
-                                          {l.from || '—'} → {l.to || '—'} ({l.vehicleType || '—'})
-                                        </p>
-                                        <p>
-                                          {formatDate(l.date) || '—'} {l.time || ''}
-                                        </p>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
                           </div>
                         </div>
                       )}

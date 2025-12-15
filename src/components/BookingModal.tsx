@@ -68,7 +68,8 @@ export interface BookingFormData {
   departureDate: string;
   returnDate: string;
   flightClass: 'economy' | 'business' | 'first';
-  pnr?: string;                   // 6 alphanumeric
+  pnr?: string;                   // 6 alphanumeric (legacy single)
+  pnrs?: string[];                // Multiple PNRs
   flightsItinerary?: string;      // free text paste area
 
   // Hotels (legacy single + multiple hotels)
@@ -232,8 +233,11 @@ export function validateStepData(formData: BookingFormData, id: StepId): Record<
 type MinimalUser = { id?: string; _id?: string; agentId?: string; };
 
 function buildBookingPayload(formData: BookingFormData, user: MinimalUser | null | undefined) {
-  const agentId =
-    user?.agentId ?? user?.id ?? user?._id ?? (formData.agent || undefined);
+  // If agent is explicitly selected in form, use it (for admin assigning to other agents)
+  // Otherwise, use logged-in user's ID
+  const agentId = formData.agent && formData.agent.trim() 
+    ? formData.agent.trim()
+    : (user?.agentId ?? user?.id ?? user?._id ?? undefined);
 
   const customerName  = formData.name?.trim() || '';
   const customerEmail = formData.email?.trim() || '';
@@ -322,6 +326,11 @@ function buildBookingPayload(formData: BookingFormData, user: MinimalUser | null
     returnDate: isoOrNull(formData.returnDate) || '',
 
     // FLIGHT - save to both 'flight' and 'flights' for compatibility
+    const pnrsArray = formData.pnrs && formData.pnrs.length > 0 
+      ? formData.pnrs.filter(p => p && p.trim()).map(p => p.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6))
+      : (formData.pnr ? [formData.pnr.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6)] : []);
+    const primaryPnr = pnrsArray[0] || '';
+    
     flight: {
       itinerary: formData.flightsItinerary || '',
       departureCity: formData.departureCity || '',
@@ -329,13 +338,16 @@ function buildBookingPayload(formData: BookingFormData, user: MinimalUser | null
       departureDate: isoOrNull(formData.departureDate) || '',
       returnDate: isoOrNull(formData.returnDate) || '',
       flightClass: formData.flightClass || 'economy',
-      pnr: (formData.pnr || '').toUpperCase(),
+      pnr: primaryPnr,
+      pnrs: pnrsArray, // Store multiple PNRs
     },
     flights: {
       raw: formData.flightsItinerary || '',
       itineraryLines: (formData.flightsItinerary || '').split('\n').filter(Boolean),
+      pnrs: pnrsArray, // Store multiple PNRs
     },
-    pnr: (formData.pnr || '').toUpperCase(),
+    pnr: primaryPnr,
+    pnrs: pnrsArray, // Store at root level too
     departureCity: formData.departureCity || '',
     arrivalCity: formData.arrivalCity || '',
     flightClass: formData.flightClass || 'economy',
@@ -496,7 +508,7 @@ const BookingModal: React.FC<BookingModalProps> = ({
     cardNumber: '', expiryDate: '', cvv: '', cardholderName: '',
     // flights
     departureCity: '', arrivalCity: '', departureDate: '', returnDate: '', flightClass: 'economy',
-    pnr: '', flightsItinerary: '',
+    pnr: '', pnrs: [], flightsItinerary: '',
     // hotels (legacy + array)
     hotelName: '', roomType: '', checkIn: '', checkOut: '', hotels: emptyHotels,
     // visa
@@ -562,6 +574,7 @@ const BookingModal: React.FC<BookingModalProps> = ({
         departureDate: initialData.departureDate || '',
         returnDate: initialData.returnDate || '',
         pnr: initialData.pnr || '',
+        pnrs: initialData.pnrs || (initialData.pnr ? [initialData.pnr] : []),
         flightsItinerary: initialData.flightsItinerary || '',
         flightClass: initialData.flightClass || 'economy',
         
@@ -1134,23 +1147,59 @@ const BookingModal: React.FC<BookingModalProps> = ({
                     {errors.date && <p className="text-red-500 text-xs mt-1">{errors.date}</p>}
                   </div>
 
-                  {/* PNR */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      PNR <span className="text-gray-400">(optional, 6 alphanumeric)</span>
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Departure Date</label>
                     <input
-                      data-testid="pnr"
-                      type="text"
-                      name="pnr"
-                      value={formData.pnr || ''}
+                      data-testid="departureDate"
+                      type="date"
+                      name="departureDate"
+                      value={formData.departureDate || ''}
                       onChange={handleInputChange}
-                      placeholder="e.g. ABC12D"
                       className={`w-full px-3 py-2 border-b focus:outline-none transition-colors ${
-                        errors.pnr ? 'border-red-500 focus:border-red-500' : 'border-gray-300 focus:border-blue-500'
+                        errors.departureDate ? 'border-red-500 focus:border-red-500' : 'border-gray-300 focus:border-blue-500'
                       }`}
                     />
-                    {errors.pnr && <p className="text-red-500 text-xs mt-1">{errors.pnr}</p>}
+                    {errors.departureDate && <p className="text-red-500 text-xs mt-1">{errors.departureDate}</p>}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Return Date</label>
+                    <input
+                      data-testid="returnDate"
+                      type="date"
+                      name="returnDate"
+                      value={formData.returnDate || ''}
+                      onChange={handleInputChange}
+                      min={formData.departureDate || undefined}
+                      className={`w-full px-3 py-2 border-b focus:outline-none transition-colors ${
+                        errors.returnDate ? 'border-red-500 focus:border-red-500' : 'border-gray-300 focus:border-blue-500'
+                      }`}
+                    />
+                    {errors.returnDate && <p className="text-red-500 text-xs mt-1">{errors.returnDate}</p>}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Departure City</label>
+                    <input
+                      type="text"
+                      name="departureCity"
+                      value={formData.departureCity || ''}
+                      onChange={handleInputChange}
+                      className="w-full px-3 py-2 border-b border-gray-300 focus:border-blue-500 focus:outline-none transition-colors"
+                      placeholder="e.g. JFK"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Arrival City</label>
+                    <input
+                      type="text"
+                      name="arrivalCity"
+                      value={formData.arrivalCity || ''}
+                      onChange={handleInputChange}
+                      className="w-full px-3 py-2 border-b border-gray-300 focus:border-blue-500 focus:outline-none transition-colors"
+                      placeholder="e.g. JED"
+                    />
                   </div>
 
                   <div className="sm:col-span-2">
@@ -1166,6 +1215,58 @@ const BookingModal: React.FC<BookingModalProps> = ({
                       <option value="first">First Class</option>
                     </select>
                   </div>
+                </div>
+
+                {/* Multiple PNRs */}
+                <div className="mt-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-sm font-medium text-gray-700">
+                      PNR(s) <span className="text-gray-400">(optional, 6 alphanumeric each)</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const currentPnrs = formData.pnrs || (formData.pnr ? [formData.pnr] : []);
+                        updateForm({ pnrs: [...currentPnrs, ''] });
+                      }}
+                      className="px-3 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium flex items-center"
+                    >
+                      <Plus className="h-3 w-3 mr-1" /> Add PNR
+                    </button>
+                  </div>
+                  {(formData.pnrs || (formData.pnr ? [formData.pnr] : [])).map((pnr, idx) => (
+                    <div key={idx} className="flex items-center gap-2 mb-2">
+                      <input
+                        type="text"
+                        value={pnr || ''}
+                        onChange={(e) => {
+                          const pnrs = formData.pnrs || (formData.pnr ? [formData.pnr] : []);
+                          const updated = [...pnrs];
+                          updated[idx] = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+                          updateForm({ pnrs: updated, pnr: updated[0] || '' });
+                        }}
+                        placeholder="e.g. ABC12D"
+                        maxLength={6}
+                        className={`flex-1 px-3 py-2 border-b focus:outline-none transition-colors ${
+                          errors.pnr ? 'border-red-500 focus:border-red-500' : 'border-gray-300 focus:border-blue-500'
+                        }`}
+                      />
+                      {(formData.pnrs || (formData.pnr ? [formData.pnr] : [])).length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const pnrs = formData.pnrs || (formData.pnr ? [formData.pnr] : []);
+                            const updated = pnrs.filter((_, i) => i !== idx);
+                            updateForm({ pnrs: updated, pnr: updated[0] || '' });
+                          }}
+                          className="p-2 text-red-600 hover:bg-red-50 rounded"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  {errors.pnr && <p className="text-red-500 text-xs mt-1">{errors.pnr}</p>}
                 </div>
               </div>
             )}
