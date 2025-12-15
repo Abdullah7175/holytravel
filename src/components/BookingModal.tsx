@@ -275,6 +275,12 @@ function buildBookingPayload(formData: BookingFormData, user: MinimalUser | null
   const sumSale   = costingRows.reduce((s, r) => s + r.totalSale, 0);
   const sumProfit = sumSale - sumCost;
 
+  // FLIGHT - prepare PNRs array before return statement
+  const pnrsArray = formData.pnrs && formData.pnrs.length > 0 
+    ? formData.pnrs.filter(p => p && p.trim()).map(p => p.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6))
+    : (formData.pnr ? [formData.pnr.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6)] : []);
+  const primaryPnr = pnrsArray[0] || '';
+
   return {
     // CUSTOMER
     customerName,
@@ -326,11 +332,6 @@ function buildBookingPayload(formData: BookingFormData, user: MinimalUser | null
     returnDate: isoOrNull(formData.returnDate) || '',
 
     // FLIGHT - save to both 'flight' and 'flights' for compatibility
-    const pnrsArray = formData.pnrs && formData.pnrs.length > 0 
-      ? formData.pnrs.filter(p => p && p.trim()).map(p => p.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6))
-      : (formData.pnr ? [formData.pnr.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6)] : []);
-    const primaryPnr = pnrsArray[0] || '';
-    
     flight: {
       itinerary: formData.flightsItinerary || '',
       departureCity: formData.departureCity || '',
