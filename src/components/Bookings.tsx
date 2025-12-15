@@ -1272,9 +1272,9 @@ const Bookings: React.FC = () => {
       doc.text('Your Personalized Luxury Umrah Partner', margin, y + 35);
 
       // Contact Information (to the right of address)
-      // const contactX = 250;
-      // doc.text('info@holytravelsandtour.com', contactX, y + 35);
-      // doc.text('+1 415-791-5351', contactX, y + 50);
+      const contactX = 250;
+      doc.text('info@holytravelsandtour.com', contactX, y + 35);
+      doc.text('+1 415-791-5351', contactX, y + 50);
       // doc.text('www.holytravelsandtour.com', contactX, y + 65);
 
       // Logo (Top Right) - Add logo2.png
