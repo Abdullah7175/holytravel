@@ -17,17 +17,49 @@ import {
 
 const AdminDashboard: React.FC = () => {
   const { user } = useAuth();
-  const { bookings, inquiries, agents, approveChange, rejectChange, fetchAgents, fetchBookings, fetchInquiries } = useData();
+  const { inquiries, agents, approveChange, rejectChange, fetchAgents, fetchInquiries } = useData();
   const [chartType, setChartType] = React.useState<'bookings' | 'profit' | 'revenue'>('bookings');
   const [agentChartType, setAgentChartType] = React.useState<'bookings' | 'profit' | 'revenue'>('bookings');
-  const [dashboardPeriod, setDashboardPeriod] = React.useState<'week' | 'month' | 'year'>('year');
+  const [dashboardPeriod, setDashboardPeriod] = React.useState<'all' | 'week' | 'month' | 'year'>('all');
 
-  // Refresh data on mount
+  // Dashboard fetches its own bookings (same as Bookings tab) so stats/charts always show data
+  const [dashboardBookings, setDashboardBookings] = React.useState<any[]>([]);
+  const [dashboardBookingsLoading, setDashboardBookingsLoading] = React.useState(false);
+  const [dashboardBookingsError, setDashboardBookingsError] = React.useState<string | null>(null);
+
+  const loadDashboardBookings = React.useCallback(async () => {
+    if (!user) return;
+    setDashboardBookingsError(null);
+    setDashboardBookingsLoading(true);
+    const endpoint = user.role === 'admin' ? '/api/bookings' : '/api/bookings/my';
+    try {
+      const { data } = await http.get(endpoint);
+      const raw = Array.isArray(data) ? data : data?.bookings ?? [];
+      const idOf = (v: any) => (v && (v._id || v.id)) ? String(v._id || v.id) : undefined;
+      const toMoneyString = (v: any) => { if (v == null) return undefined; if (typeof v === 'number') return `$${v}`; const n = Number(v); return Number.isFinite(n) ? `$${n}` : undefined; };
+      const mapped = raw.map((b: any) => ({
+        ...b,
+        id: idOf(b),
+        agentId: b?.agentId ?? (typeof b?.agent === 'string' ? b.agent : idOf(b?.agent?._id ?? b?.agent?.id)),
+        agentName: (typeof b?.agent === 'object' && b?.agent?.name) ? b.agent.name : b?.agentName ?? '',
+        amount: toMoneyString(b?.amount ?? b?.totalAmount),
+      }));
+      setDashboardBookings(mapped);
+    } catch (e: any) {
+      console.error('Dashboard fetch bookings failed', e);
+      setDashboardBookings([]);
+      const msg = e?.response?.data?.message ?? (typeof e?.response?.data === 'string' ? e.response?.data : null) ?? e?.message ?? 'Failed to load bookings';
+      setDashboardBookingsError(String(msg));
+    } finally {
+      setDashboardBookingsLoading(false);
+    }
+  }, [user]);
+
   React.useEffect(() => {
-    fetchBookings();
+    if (user) loadDashboardBookings();
     fetchInquiries();
-    fetchAgents(); // Ensure agents are loaded
-  }, []);
+    fetchAgents();
+  }, [user, loadDashboardBookings, fetchInquiries, fetchAgents]);
 
   // Helper function to calculate profit from booking
   const getProfit = (booking: any): number => {
@@ -63,11 +95,18 @@ const AdminDashboard: React.FC = () => {
     return 0;
   };
 
-  // Filter bookings by dashboard period
+  // Date-only YYYY-MM-DD in local time so week/month/year filters work regardless of timezone
+  const toLocalDateString = (d: Date): string => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+
   const getFilteredBookingsByDashboardPeriod = () => {
+    if (dashboardPeriod === 'all') return dashboardBookings;
     const now = new Date();
     let startDate: Date;
-
     switch (dashboardPeriod) {
       case 'week':
         startDate = new Date(now);
@@ -80,20 +119,24 @@ const AdminDashboard: React.FC = () => {
         startDate = new Date(now.getFullYear(), 0, 1);
         break;
       default:
-        startDate = new Date(now.getFullYear(), 0, 1);
+        return dashboardBookings;
     }
-
-    return bookings.filter(booking => {
-      const bookingDate = new Date(booking.createdAt || (booking as any).date || 0);
-      return bookingDate >= startDate && bookingDate <= now;
+    const startStr = toLocalDateString(startDate);
+    const endStr = toLocalDateString(now);
+    return dashboardBookings.filter(booking => {
+      const raw = (booking as any).createdAt ?? (booking as any).date;
+      if (raw == null || raw === '') return true;
+      const bookingDate = new Date(raw);
+      if (Number.isNaN(bookingDate.getTime())) return true;
+      const bookingStr = toLocalDateString(bookingDate);
+      return bookingStr >= startStr && bookingStr <= endStr;
     });
   };
 
-  // Filter inquiries by dashboard period
   const getFilteredInquiriesByDashboardPeriod = () => {
+    if (dashboardPeriod === 'all') return inquiries;
     const now = new Date();
     let startDate: Date;
-
     switch (dashboardPeriod) {
       case 'week':
         startDate = new Date(now);
@@ -106,12 +149,15 @@ const AdminDashboard: React.FC = () => {
         startDate = new Date(now.getFullYear(), 0, 1);
         break;
       default:
-        startDate = new Date(now.getFullYear(), 0, 1);
+        return inquiries;
     }
-
+    const startStr = toLocalDateString(startDate);
+    const endStr = toLocalDateString(now);
     return inquiries.filter(inquiry => {
       const inquiryDate = new Date(inquiry.createdAt || 0);
-      return inquiryDate >= startDate && inquiryDate <= now;
+      if (Number.isNaN(inquiryDate.getTime())) return false;
+      const inquiryStr = toLocalDateString(inquiryDate);
+      return inquiryStr >= startStr && inquiryStr <= endStr;
     });
   };
 
@@ -133,13 +179,13 @@ const AdminDashboard: React.FC = () => {
 
   const activeInquiries = filteredDashboardInquiries.filter(i => i.status === 'pending').length;
   const resolvedInquiries = filteredDashboardInquiries.filter(i => i.status === 'responded' || i.status === 'closed').length;
-  // Get period label for trends
   const getPeriodLabel = () => {
     switch (dashboardPeriod) {
+      case 'all': return 'all time';
       case 'week': return 'this week';
       case 'month': return 'this month';
       case 'year': return 'this year';
-      default: return 'this month';
+      default: return 'all time';
     }
   };
 
@@ -176,11 +222,10 @@ const AdminDashboard: React.FC = () => {
 
 
 
-  // Filter bookings based on dashboard period
   const getFilteredBookings = () => {
+    if (dashboardPeriod === 'all') return dashboardBookings;
     const now = new Date();
     let startDate: Date;
-
     switch (dashboardPeriod) {
       case 'week':
         startDate = new Date(now);
@@ -193,12 +238,17 @@ const AdminDashboard: React.FC = () => {
         startDate = new Date(now.getFullYear(), 0, 1);
         break;
       default:
-        startDate = new Date(now.getFullYear(), 0, 1);
+        return dashboardBookings;
     }
-
-    return bookings.filter(booking => {
-      const bookingDate = new Date(booking.createdAt || (booking as any).date || 0);
-      return bookingDate >= startDate && bookingDate <= now;
+    const startStr = toLocalDateString(startDate);
+    const endStr = toLocalDateString(now);
+    return dashboardBookings.filter(booking => {
+      const raw = (booking as any).createdAt ?? (booking as any).date;
+      if (raw == null || raw === '') return true;
+      const bookingDate = new Date(raw);
+      if (Number.isNaN(bookingDate.getTime())) return true;
+      const bookingStr = toLocalDateString(bookingDate);
+      return bookingStr >= startStr && bookingStr <= endStr;
     });
   };
 
@@ -487,17 +537,14 @@ const AdminDashboard: React.FC = () => {
   }, [filteredBookings, agentChartType, agents, user]);
 
   // Helper function to format date labels based on period
-  const formatDateLabel = (date: Date, period: 'week' | 'month' | 'year'): string => {
+  const formatDateLabel = (date: Date, period: 'all' | 'week' | 'month' | 'year'): string => {
     if (period === 'week') {
-      // Show day name and date (e.g., "Mon, Jan 1")
       return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-    } else if (period === 'month') {
-      // Show day number (e.g., "1", "2", "31")
-      return date.getDate().toString();
-    } else {
-      // Show month name (e.g., "Jan", "Feb", "Mar")
-      return date.toLocaleDateString('en-US', { month: 'short' });
     }
+    if (period === 'month') {
+      return date.getDate().toString();
+    }
+    return date.toLocaleDateString('en-US', { month: 'short' });
   };
 
   // Calculate performance data grouped by dates based on selected period
@@ -514,7 +561,6 @@ const AdminDashboard: React.FC = () => {
     let startDate: Date;
 
     if (dashboardPeriod === 'week') {
-      // 7 days: today and 6 days before
       for (let i = 6; i >= 0; i--) {
         const date = new Date(now);
         date.setDate(now.getDate() - i);
@@ -525,21 +571,17 @@ const AdminDashboard: React.FC = () => {
       startDate.setDate(now.getDate() - 6);
       startDate.setHours(0, 0, 0, 0);
     } else if (dashboardPeriod === 'month') {
-      // Days of current month
       const currentMonth = now.getMonth();
       const currentYear = now.getFullYear();
       const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
-      
       for (let day = 1; day <= daysInMonth; day++) {
-        const date = new Date(currentYear, currentMonth, day);
-        dateBuckets.push(date);
+        dateBuckets.push(new Date(currentYear, currentMonth, day));
       }
       startDate = new Date(currentYear, currentMonth, 1);
     } else {
-      // 12 months of the year
+      // year or all: 12 months
       for (let month = 0; month < 12; month++) {
-        const date = new Date(now.getFullYear(), month, 1);
-        dateBuckets.push(date);
+        dateBuckets.push(new Date(now.getFullYear(), month, 1));
       }
       startDate = new Date(now.getFullYear(), 0, 1);
     }
@@ -572,27 +614,20 @@ const AdminDashboard: React.FC = () => {
       let bucketKey: string;
       
       if (dashboardPeriod === 'week') {
-        // Match to specific day
         const dayStart = new Date(bookingDate);
         dayStart.setHours(0, 0, 0, 0);
         bucketKey = dayStart.toISOString().split('T')[0];
       } else if (dashboardPeriod === 'month') {
-        // Match to day of month (only if in current month)
         const currentMonth = now.getMonth();
         const currentYear = now.getFullYear();
         if (bookingDate.getMonth() === currentMonth && bookingDate.getFullYear() === currentYear) {
           bucketKey = bookingDate.getDate().toString();
         } else {
-          return; // Skip bookings not in current month
+          return;
         }
       } else {
-        // Match to month (only if in current year)
-        const currentYear = now.getFullYear();
-        if (bookingDate.getFullYear() === currentYear) {
-          bucketKey = bookingDate.getMonth().toString();
-        } else {
-          return; // Skip bookings not in current year
-        }
+        // year or all: group by month
+        bucketKey = bookingDate.getMonth().toString();
       }
 
       if (dateMetricsMap[bucketKey]) {
@@ -1405,10 +1440,23 @@ const AdminDashboard: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 mb-2">Admin Dashboard</h1>
-          <p className="text-gray-600">Welcome back, {user?.name}</p>
+          <p className="text-gray-600">
+            Welcome back, {user?.name}
+            {dashboardBookingsLoading && <span className="ml-2 text-sm text-gray-500">(loading bookings…)</span>}
+          </p>
         </div>
         {/* Dashboard Period Filter Buttons */}
         <div className="mt-4 sm:mt-0 flex items-center space-x-2">
+          <button
+            onClick={() => setDashboardPeriod('all')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              dashboardPeriod === 'all'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+            }`}
+          >
+            All
+          </button>
           <button
             onClick={() => setDashboardPeriod('week')}
             className={`px-4 py-2 rounded-lg font-medium transition-colors ${
@@ -1441,6 +1489,22 @@ const AdminDashboard: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {dashboardBookingsError && (
+        <div className="flex items-center justify-between gap-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+            <span className="text-amber-800">{dashboardBookingsError}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => loadDashboardBookings()}
+            className="px-3 py-1.5 text-sm bg-amber-600 text-white rounded hover:bg-amber-700"
+          >
+            Retry
+          </button>
+        </div>
+      )}
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6">
@@ -1493,17 +1557,17 @@ const AdminDashboard: React.FC = () => {
             </div>
           <button
             onClick={() => {
-              console.log('🔄 Manual refresh triggered');
               fetchAgents();
-                fetchBookings();
+              loadDashboardBookings();
             }}
-              className="px-3 py-1.5 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+            className="px-3 py-1.5 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
           >
             Refresh
           </button>
         </div>
         </div>
         <div className="text-sm text-gray-500 mb-6">
+          {dashboardPeriod === 'all' && 'All time'}
           {dashboardPeriod === 'week' && 'Current Week'}
           {dashboardPeriod === 'month' && 'Current Month'}
           {dashboardPeriod === 'year' && 'Current Year'}
@@ -1529,7 +1593,7 @@ const AdminDashboard: React.FC = () => {
               </div>
             ) : filteredBookings.length === 0 ? (
               <div>
-                <p>No booking data available for {dashboardPeriod === 'week' ? 'current week' : dashboardPeriod === 'month' ? 'current month' : 'current year'}</p>
+                <p>No booking data available for {dashboardPeriod === 'all' ? 'all time' : dashboardPeriod === 'week' ? 'current week' : dashboardPeriod === 'month' ? 'current month' : 'current year'}</p>
                 <p className="text-sm mt-2">Try selecting a different time period</p>
               </div>
             ) : (
@@ -1587,6 +1651,7 @@ const AdminDashboard: React.FC = () => {
           </div>
         </div>
         <div className="text-sm text-gray-500 mb-6">
+          {dashboardPeriod === 'all' && 'All time'}
           {dashboardPeriod === 'week' && 'Current Week'}
           {dashboardPeriod === 'month' && 'Current Month'}
           {dashboardPeriod === 'year' && 'Current Year'}
@@ -1606,7 +1671,7 @@ const AdminDashboard: React.FC = () => {
           <div className="text-center py-8 text-gray-500">
             {filteredBookings.length === 0 ? (
               <div>
-                <p>No booking data available for {dashboardPeriod === 'week' ? 'current week' : dashboardPeriod === 'month' ? 'current month' : 'current year'}</p>
+                <p>No booking data available for {dashboardPeriod === 'all' ? 'all time' : dashboardPeriod === 'week' ? 'current week' : dashboardPeriod === 'month' ? 'current month' : 'current year'}</p>
                 <p className="text-sm mt-2">Try selecting a different time period</p>
               </div>
             ) : (
