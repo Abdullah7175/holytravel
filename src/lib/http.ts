@@ -17,7 +17,7 @@ const normalizeHostname = (hostname: string): string => {
   return hostname;
 };
 
-// Helper to normalize API base URL (handles both hostname and full URLs)
+// Helper to normalize API base URL (same pattern as Marwah/Mustafa so dashboard and bookings load)
 const normalizeApiBase = (baseUrl: string | undefined): string => {
   // If VITE_API_BASE is explicitly set, use it
   if (baseUrl) {
@@ -25,42 +25,40 @@ const normalizeApiBase = (baseUrl: string | undefined): string => {
       const url = new URL(baseUrl);
       if (url.hostname === 'holytravel.com') {
         url.hostname = 'www.holytravel.com';
-        return url.toString().replace(/\/$/, ''); // Remove trailing slash
+        return url.toString().replace(/\/$/, '');
       }
-      return baseUrl.replace(/\/$/, ''); // Remove trailing slash
+      return baseUrl.replace(/\/$/, '');
     } catch {
-      // If it's not a valid URL, treat it as hostname
       const normalized = normalizeHostname(baseUrl);
       return typeof window !== "undefined"
         ? `${window.location.protocol}//${normalized}`
         : `https://${normalized}`;
     }
   }
-  
-  // In development on localhost, connect directly to backend on port 7000
-  // Vite proxy should handle this, but explicit connection is more reliable
+
+  // When VITE_API_BASE is not set: dev → backend port; production → same-origin for proxy
   if (typeof window !== "undefined") {
     const hostname = window.location.hostname;
     const protocol = window.location.protocol;
-    
-    // If running on localhost, use explicit port 7000
+
+    // Development: point directly to backend so /api/bookings and dashboard data load
     if (hostname === 'localhost' || hostname === '127.0.0.1') {
       return 'http://localhost:7000';
     }
-    
-    // For production (booking.holytravelsandtour.com), use same origin
-    // Nginx will proxy /api/* to backend
-    if (hostname === 'booking.holytravelsandtour.com' || hostname.includes('holytravel')) {
-      // Use relative URLs so nginx can proxy /api/* requests
+
+    // Production: use same origin so Nginx can proxy /api/* to backend
+    if (
+      hostname === 'booking.holytravelsandtour.com' ||
+      hostname.endsWith('.holytravelsandtour.com') ||
+      hostname.includes('holytravel')
+    ) {
       return '';
     }
-    
-    // For other hosts, construct URL normally
+
     const normalized = normalizeHostname(hostname);
     return `${protocol}//${normalized}`;
   }
-  
-  // Server-side or fallback
+
   return "http://localhost:7000";
 };
 
